@@ -116,3 +116,6 @@ Primary goal: teach reading fundamentals through very short, engaging mini-games
 - One mini-game.
 - One correct word (“cat”).
 - One error sound.
+- 
+### 9. Documentation
+- https://deepwiki.com/sergei-serezha/reading_game/3-technical-documentation
