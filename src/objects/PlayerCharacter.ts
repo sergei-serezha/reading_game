@@ -2,31 +2,47 @@ import Phaser from 'phaser';
 import { COLORS, MOVE_TWEEN_DURATION_MS } from '../config/Constants';
 
 export class PlayerCharacter extends Phaser.GameObjects.Container {
-  private body_circle: Phaser.GameObjects.Arc;
-  private eyes: Phaser.GameObjects.Arc[];
+  private sword: Phaser.GameObjects.Container;
   private isMoving: boolean = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y);
 
-    // Main body - a friendly circle
-    this.body_circle = scene.add.circle(0, 0, 24, COLORS.PLAYER);
-    this.body_circle.setStrokeStyle(3, 0xff4444);
-    this.add(this.body_circle);
+    // Cape behind the knight
+    const cape = scene.add.triangle(-8, 10, 0, 0, 20, 12, 0, 24, 0x8b1d2c).setOrigin(0.5);
+    this.add(cape);
 
-    // Eyes
-    const leftEye = scene.add.circle(-8, -6, 4, 0xffffff);
-    const rightEye = scene.add.circle(8, -6, 4, 0xffffff);
-    const leftPupil = scene.add.circle(-8, -6, 2, 0x333333);
-    const rightPupil = scene.add.circle(8, -6, 2, 0x333333);
-    this.eyes = [leftEye, rightEye, leftPupil, rightPupil];
-    this.add([leftEye, rightEye, leftPupil, rightPupil]);
+    // Armor torso
+    const torso = scene.add.rectangle(0, 8, 30, 28, 0x9aa3b2);
+    torso.setStrokeStyle(2, 0x4d5868);
+    this.add(torso);
 
-    // Mouth - a small smile
-    const mouth = scene.add.arc(0, 4, 8, 0, 180, false, 0xff4444);
-    this.add(mouth);
+    // Belt
+    const belt = scene.add.rectangle(0, 16, 28, 5, 0x4a3a2a);
+    this.add(belt);
 
-    this.setSize(48, 48);
+    // Helmet
+    const helmet = scene.add.rectangle(0, -13, 26, 20, 0xc1c8d4);
+    helmet.setStrokeStyle(2, 0x5a6472);
+    this.add(helmet);
+
+    // Visor slit and plume
+    const visor = scene.add.rectangle(0, -13, 14, 3, 0x2d2d44);
+    const plume = scene.add.triangle(0, -26, 0, 8, 10, 8, 5, -6, 0xd4a017).setOrigin(0.5);
+    this.add([visor, plume]);
+
+    // Sword
+    this.sword = scene.add.container(22, -2);
+    const blade = scene.add.rectangle(0, -10, 8, 30, 0xdfe5ee);
+    blade.setStrokeStyle(1, 0x8a94a3);
+    const tip = scene.add.triangle(0, -27, -4, 0, 4, 0, 0, -8, 0xdfe5ee).setOrigin(0.5);
+    const guard = scene.add.rectangle(0, 6, 14, 4, 0xd4a017);
+    const handle = scene.add.rectangle(0, 14, 5, 14, 0x3c2f24);
+    this.sword.add([blade, tip, guard, handle]);
+    this.sword.setAngle(20);
+    this.add(this.sword);
+
+    this.setSize(64, 64);
     scene.add.existing(this);
 
     // Idle bobbing animation
@@ -84,6 +100,41 @@ export class PlayerCharacter extends Phaser.GameObjects.Container {
       yoyo: true,
       repeat: 2,
       ease: 'Back.easeOut',
+    });
+  }
+
+  playSlashAnimation(onComplete?: () => void): void {
+    this.scene.tweens.killTweensOf(this.sword);
+    this.scene.tweens.add({
+      targets: this.sword,
+      angle: -55,
+      duration: 90,
+      ease: 'Sine.out',
+      onComplete: () => {
+        this.scene.tweens.add({
+          targets: this.sword,
+          angle: 70,
+          duration: 130,
+          ease: 'Cubic.in',
+          onComplete: () => {
+            this.scene.tweens.add({
+              targets: this.sword,
+              angle: 20,
+              duration: 90,
+              ease: 'Sine.out',
+              onComplete: () => onComplete?.(),
+            });
+          },
+        });
+      },
+    });
+
+    this.scene.tweens.add({
+      targets: this,
+      x: this.x + 4,
+      duration: 110,
+      yoyo: true,
+      ease: 'Sine.inOut',
     });
   }
 }

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, COLORS, FONT_FAMILY, FEEDBACK_DELAY_MS } from '../config/Constants';
+import { GAME_WIDTH, GAME_HEIGHT, COLORS, FONT_FAMILY } from '../config/Constants';
 import { LevelConfig, GridPosition } from '../types/LevelTypes';
 import { LetterGrid } from '../objects/LetterGrid';
 import { LetterTile, LetterTileState } from '../objects/LetterTile';
@@ -13,7 +13,7 @@ import { ProgressManager } from '../managers/ProgressManager';
 
 export class AlphabetJourneyScene extends Phaser.Scene {
   private static readonly SAY_TO_LETTER_DELAY_MS = 550;
-  private static readonly LETS_FIND_TO_LETTER_DELAY_MS = 880;
+  private static readonly LETS_FIND_TO_LETTER_DELAY_MS = 440;
   private levelConfig: LevelConfig;
   private grid: LetterGrid;
   private player: PlayerCharacter;
@@ -25,6 +25,12 @@ export class AlphabetJourneyScene extends Phaser.Scene {
   private progressBar: ProgressBar;
   private currentPosition: GridPosition;
   private isProcessing: boolean = false;
+  private spaceKey: Phaser.Input.Keyboard.Key | null = null;
+  private awaitingSlashInput: boolean = false;
+  private slashPrompt: Phaser.GameObjects.Text | null = null;
+  private pendingSlashTile: LetterTile | null = null;
+  private pendingSlashPosition: GridPosition | null = null;
+  private pendingArcadeReward: boolean = false;
 
   constructor() {
     super({ key: 'AlphabetJourneyScene' });
@@ -81,6 +87,7 @@ export class AlphabetJourneyScene extends Phaser.Scene {
     // Setup input
     this.inputManager = new InputManager(this);
     this.inputManager.enable();
+    this.spaceKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE) ?? null;
 
     // Setup tap-on-tile
     this.setupTileTapHandlers();
@@ -93,6 +100,13 @@ export class AlphabetJourneyScene extends Phaser.Scene {
   }
 
   update(): void {
+    if (this.awaitingSlashInput) {
+      if (this.spaceKey && Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+        this.resolveSlashStep();
+      }
+      return;
+    }
+
     if (this.isProcessing) return;
 
     const dir = this.inputManager.consumeDirection();
@@ -153,6 +167,8 @@ export class AlphabetJourneyScene extends Phaser.Scene {
   }
 
   private handleCorrectMove(tile: LetterTile, pos: GridPosition): void {
+    this.clearTargetHint();
+
     // Mark completed
     this.grid.markCompleted(pos);
     tile.playSelectAnimation();
@@ -172,28 +188,12 @@ export class AlphabetJourneyScene extends Phaser.Scene {
 
     // "Say" + current letter always plays first after landing
     this.playSayThenPhoneme(tile.letter, () => {
-      // Check if earned arcade game
-      if (earnedArcade) {
-        this.time.delayedCall(FEEDBACK_DELAY_MS, () => {
-          this.handleArcadeReward(pos);
-        });
-        return;
-      }
-
-      const hasMore = this.grid.advanceSequence();
-
-      if (!hasMore) {
-        this.handleLevelComplete();
-        return;
-      }
-
-      this.currentPosition = pos;
-      this.grid.clearHighlights();
-      this.grid.highlightAdjacent(this.currentPosition);
-      this.setupTileTapHandlers();
-
-      // "Let's find" + next letter only after "Say" sequence is done
-      this.showTargetHint();
+      this.awaitingSlashInput = true;
+      this.isProcessing = true;
+      this.pendingSlashTile = tile;
+      this.pendingSlashPosition = pos;
+      this.pendingArcadeReward = earnedArcade;
+      this.showSlashPrompt();
     });
   }
 
@@ -225,6 +225,7 @@ export class AlphabetJourneyScene extends Phaser.Scene {
   }
 
   private handleLevelComplete(): void {
+    this.clearSlashPrompt();
     this.feedbackManager.playLevelComplete();
     this.progressManager.completeLevel(this.levelConfig.levelId);
     this.progressManager.save();
@@ -242,9 +243,8 @@ export class AlphabetJourneyScene extends Phaser.Scene {
    * phoneme sound. No text spelling out the letter — just audio for pre-readers.
    */
   private showTargetHint(): void {
-    // Clean up previous hint elements
-    this.children.getByName('targetHint')?.destroy();
-    this.children.getByName('targetHintBtn')?.destroy();
+    this.clearSlashPrompt();
+    this.clearTargetHint();
 
     const target = this.grid.getCurrentTargetLetter();
     if (!target) return;
@@ -281,7 +281,9 @@ export class AlphabetJourneyScene extends Phaser.Scene {
     // Tap speaker to replay "Let's Find" + phoneme
     btn.on('pointerdown', () => {
       this.isProcessing = true;
-      this.playLetsFindThenPhoneme(target);
+      this.playLetsFindThenPhoneme(target, () => {
+        this.isProcessing = false;
+      });
       // Quick bounce feedback
       this.tweens.add({
         targets: btn,
@@ -291,9 +293,6 @@ export class AlphabetJourneyScene extends Phaser.Scene {
         yoyo: true,
         ease: 'Back.easeOut',
       });
-      this.time.delayedCall(AlphabetJourneyScene.LETS_FIND_TO_LETTER_DELAY_MS, () => {
-        this.isProcessing = false;
-      });
     });
   }
 
@@ -301,8 +300,7 @@ export class AlphabetJourneyScene extends Phaser.Scene {
   private playSayThenPhoneme(letter: string, onComplete?: () => void): void {
     this.audioManager.playSay();
     this.time.delayedCall(AlphabetJourneyScene.SAY_TO_LETTER_DELAY_MS, () => {
-      this.audioManager.playPhoneme(letter);
-      onComplete?.();
+      this.audioManager.playPhonemeAndWait(letter, onComplete);
     });
   }
 
@@ -310,8 +308,7 @@ export class AlphabetJourneyScene extends Phaser.Scene {
   private playLetsFindThenPhoneme(letter: string, onComplete?: () => void): void {
     this.audioManager.playLetsFind();
     this.time.delayedCall(AlphabetJourneyScene.LETS_FIND_TO_LETTER_DELAY_MS, () => {
-      this.audioManager.playPhoneme(letter);
-      onComplete?.();
+      this.audioManager.playPhonemeAndWait(letter, onComplete);
     });
   }
 
@@ -335,6 +332,78 @@ export class AlphabetJourneyScene extends Phaser.Scene {
         });
       });
     }
+  }
+
+  private showSlashPrompt(): void {
+    this.clearSlashPrompt();
+    this.slashPrompt = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 50, 'Press SPACE to slash!', {
+      fontFamily: FONT_FAMILY,
+      fontSize: '14px',
+      color: COLORS.TEXT_ACCENT,
+      stroke: '#000000',
+      strokeThickness: 3,
+    }).setOrigin(0.5).setDepth(60);
+
+    this.tweens.add({
+      targets: this.slashPrompt,
+      alpha: 0.45,
+      duration: 400,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut',
+    });
+  }
+
+  private clearSlashPrompt(): void {
+    if (!this.slashPrompt) return;
+    this.tweens.killTweensOf(this.slashPrompt);
+    this.slashPrompt.destroy();
+    this.slashPrompt = null;
+  }
+
+  private clearTargetHint(): void {
+    this.children.getByName('targetHint')?.destroy();
+    this.children.getByName('targetHintBtn')?.destroy();
+  }
+
+  private resolveSlashStep(): void {
+    const tile = this.pendingSlashTile;
+    const pos = this.pendingSlashPosition;
+    if (!tile || !pos) return;
+
+    this.awaitingSlashInput = false;
+    this.clearSlashPrompt();
+
+    this.player.playSlashAnimation(() => {
+      tile.playSlashBreakAnimation(() => {
+        this.pendingSlashTile = null;
+        this.pendingSlashPosition = null;
+        this.continueAfterSlash(pos, this.pendingArcadeReward);
+      });
+    });
+  }
+
+  private continueAfterSlash(pos: GridPosition, earnedArcade: boolean): void {
+    if (earnedArcade) {
+      this.pendingArcadeReward = false;
+      this.audioManager.playArcadeUnlock(() => {
+        this.handleArcadeReward(pos);
+      });
+      return;
+    }
+
+    this.pendingArcadeReward = false;
+    const hasMore = this.grid.advanceSequence();
+    if (!hasMore) {
+      this.handleLevelComplete();
+      return;
+    }
+
+    this.currentPosition = pos;
+    this.grid.clearHighlights();
+    this.grid.highlightAdjacent(this.currentPosition);
+    this.setupTileTapHandlers();
+    this.showTargetHint();
   }
 
   private directionToDelta(dir: Direction): GridPosition {

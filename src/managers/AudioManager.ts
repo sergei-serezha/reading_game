@@ -17,6 +17,10 @@ export class AudioManager {
     this.playSfx(`phonics/${letter.toLowerCase()}`);
   }
 
+  playPhonemeAndWait(letter: string, onComplete?: () => void): void {
+    this.playSfxAndWait(`phonics/${letter.toLowerCase()}`, onComplete);
+  }
+
   playWord(word: string): void {
     this.playSfx(`words/${word.toLowerCase()}`);
   }
@@ -27,6 +31,10 @@ export class AudioManager {
 
   playLetsFind(): void {
     this.playSfx('feedback/lets-find');
+  }
+
+  playArcadeUnlock(onComplete?: () => void): void {
+    this.playSfxAndWait('feedback/arcade-unlock', onComplete);
   }
 
   playCorrect(): void {
@@ -57,6 +65,24 @@ export class AudioManager {
       } catch {
         // Audio not loaded — silently skip
       }
+    }
+  }
+
+  private playSfxAndWait(key: string, onComplete?: () => void): void {
+    if (this.isMuted || !this.scene.cache.audio.exists(key)) {
+      onComplete?.();
+      return;
+    }
+
+    try {
+      const sfx = this.scene.sound.add(key, { volume: SFX_VOLUME });
+      sfx.once('complete', () => {
+        sfx.destroy();
+        onComplete?.();
+      });
+      sfx.play();
+    } catch {
+      onComplete?.();
     }
   }
 }

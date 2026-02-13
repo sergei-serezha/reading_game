@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, COLORS, FONT_FAMILY, FEEDBACK_DELAY_MS } from '../config/Constants';
+import { GAME_WIDTH, GAME_HEIGHT, COLORS, FONT_FAMILY } from '../config/Constants';
 import { LevelConfig, GridPosition } from '../types/LevelTypes';
 import { LetterGrid } from '../objects/LetterGrid';
 import { LetterTile, LetterTileState } from '../objects/LetterTile';
@@ -23,7 +23,7 @@ import { ProgressManager } from '../managers/ProgressManager';
  */
 export class HiddenSequenceScene extends Phaser.Scene {
   private static readonly SAY_TO_LETTER_DELAY_MS = 550;
-  private static readonly LETS_FIND_TO_LETTER_DELAY_MS = 880;
+  private static readonly LETS_FIND_TO_LETTER_DELAY_MS = 440;
   private levelConfig: LevelConfig;
   private grid: LetterGrid;
   private player: PlayerCharacter;
@@ -192,7 +192,7 @@ export class HiddenSequenceScene extends Phaser.Scene {
     this.playSayThenPhoneme(tile.letter, () => {
       // Check if earned arcade game
       if (earnedArcade) {
-        this.time.delayedCall(FEEDBACK_DELAY_MS, () => {
+        this.audioManager.playArcadeUnlock(() => {
           this.handleArcadeReward(pos);
         });
         return;
@@ -295,7 +295,9 @@ export class HiddenSequenceScene extends Phaser.Scene {
 
     btn.on('pointerdown', () => {
       this.isProcessing = true;
-      this.playLetsFindThenPhoneme(target);
+      this.playLetsFindThenPhoneme(target, () => {
+        this.isProcessing = false;
+      });
       this.tweens.add({
         targets: btn,
         scaleX: 1.3,
@@ -304,9 +306,6 @@ export class HiddenSequenceScene extends Phaser.Scene {
         yoyo: true,
         ease: 'Back.easeOut',
       });
-      this.time.delayedCall(HiddenSequenceScene.LETS_FIND_TO_LETTER_DELAY_MS, () => {
-        this.isProcessing = false;
-      });
     });
   }
 
@@ -314,8 +313,7 @@ export class HiddenSequenceScene extends Phaser.Scene {
   private playSayThenPhoneme(letter: string, onComplete?: () => void): void {
     this.audioManager.playSay();
     this.time.delayedCall(HiddenSequenceScene.SAY_TO_LETTER_DELAY_MS, () => {
-      this.audioManager.playPhoneme(letter);
-      onComplete?.();
+      this.audioManager.playPhonemeAndWait(letter, onComplete);
     });
   }
 
@@ -323,8 +321,7 @@ export class HiddenSequenceScene extends Phaser.Scene {
   private playLetsFindThenPhoneme(letter: string, onComplete?: () => void): void {
     this.audioManager.playLetsFind();
     this.time.delayedCall(HiddenSequenceScene.LETS_FIND_TO_LETTER_DELAY_MS, () => {
-      this.audioManager.playPhoneme(letter);
-      onComplete?.();
+      this.audioManager.playPhonemeAndWait(letter, onComplete);
     });
   }
 

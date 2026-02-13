@@ -30,6 +30,7 @@ export class LetterTile extends Phaser.GameObjects.Container {
   private bg: Phaser.GameObjects.Rectangle;
   private letterText: Phaser.GameObjects.Text | null = null;
   private border: Phaser.GameObjects.Rectangle;
+  private isBroken: boolean = false;
 
   constructor(
     scene: Phaser.Scene,
@@ -138,6 +139,72 @@ export class LetterTile extends Phaser.GameObjects.Container {
       alpha: 1,
       duration: 400,
       ease: 'Power2',
+    });
+  }
+
+  playSlashBreakAnimation(onComplete?: () => void): void {
+    if (this.isEmpty || this.isBroken) {
+      onComplete?.();
+      return;
+    }
+    this.isBroken = true;
+
+    const halfWidth = TILE_SIZE / 2;
+    const bgColor = STATE_COLORS[this.tileState];
+
+    const leftHalf = this.scene.add.rectangle(-TILE_SIZE / 4, 0, halfWidth, TILE_SIZE, bgColor);
+    const rightHalf = this.scene.add.rectangle(TILE_SIZE / 4, 0, halfWidth, TILE_SIZE, bgColor);
+    leftHalf.setStrokeStyle(2, 0x2b2b44);
+    rightHalf.setStrokeStyle(2, 0x2b2b44);
+    this.add([leftHalf, rightHalf]);
+
+    const leftLetter = this.letterText
+      ? this.scene.add.text(-TILE_SIZE / 4, 0, this.letter, {
+        fontFamily: FONT_FAMILY,
+        fontSize: '24px',
+        color: COLORS.TEXT_LETTER,
+      }).setOrigin(0.5)
+      : null;
+    const rightLetter = this.letterText
+      ? this.scene.add.text(TILE_SIZE / 4, 0, this.letter, {
+        fontFamily: FONT_FAMILY,
+        fontSize: '24px',
+        color: COLORS.TEXT_LETTER,
+      }).setOrigin(0.5)
+      : null;
+    if (leftLetter && rightLetter) {
+      this.add([leftLetter, rightLetter]);
+    }
+
+    this.border.setVisible(false);
+    this.bg.setVisible(false);
+    this.letterText?.setVisible(false);
+
+    this.scene.tweens.add({
+      targets: [leftHalf, leftLetter].filter(Boolean),
+      x: -TILE_SIZE / 4 - 18,
+      y: 8,
+      angle: -18,
+      alpha: 0,
+      duration: 240,
+      ease: 'Cubic.out',
+    });
+
+    this.scene.tweens.add({
+      targets: [rightHalf, rightLetter].filter(Boolean),
+      x: TILE_SIZE / 4 + 18,
+      y: 8,
+      angle: 18,
+      alpha: 0,
+      duration: 240,
+      ease: 'Cubic.out',
+      onComplete: () => {
+        leftHalf.destroy();
+        rightHalf.destroy();
+        leftLetter?.destroy();
+        rightLetter?.destroy();
+        onComplete?.();
+      },
     });
   }
 }

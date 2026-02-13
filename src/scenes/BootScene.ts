@@ -58,6 +58,7 @@ export class BootScene extends Phaser.Scene {
     this.load.audio('words/bed', 'assets/audio/words/bed.mp3');
     this.load.audio('feedback/say', 'assets/say.wav');
     this.load.audio('feedback/lets-find', 'assets/lets-find.wav');
+    this.load.audio('feedback/arcade-unlock', 'assets/hooray_5_challenges_v2.wav');
     this.load.audio('feedback/correct', 'assets/audio/feedback/correct.mp3');
     this.load.audio('feedback/error', 'assets/audio/feedback/error.mp3');
     this.load.audio('feedback/level-complete', 'assets/audio/feedback/level-complete.mp3');

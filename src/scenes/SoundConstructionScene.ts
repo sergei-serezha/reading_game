@@ -232,7 +232,7 @@ export class SoundConstructionScene extends Phaser.Scene {
 
     // Check if earned arcade game
     if (earnedArcade) {
-      this.time.delayedCall(FEEDBACK_DELAY_MS, () => {
+      this.audioManager.playArcadeUnlock(() => {
         this.handleArcadeReward();
       });
       return;
