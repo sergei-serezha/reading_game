@@ -40,6 +40,7 @@ export class BootScene extends Phaser.Scene {
 
     // Load audio assets if they exist (gracefully fail for MVP)
     this.loadAudioAssets();
+    this.loadTextAssets();
   }
 
   private loadAudioAssets(): void {
@@ -67,6 +68,10 @@ export class BootScene extends Phaser.Scene {
     this.load.on('loaderror', (file: Phaser.Loader.File) => {
       console.warn(`Could not load asset: ${file.key} (${file.url}) — using placeholder`);
     });
+  }
+
+  private loadTextAssets(): void {
+    this.load.text('content/about', 'assets/about.txt');
   }
 
   create(): void {
