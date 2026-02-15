@@ -49,6 +49,26 @@ export class AudioManager {
     this.playSfx('feedback/level-complete');
   }
 
+  speakTextAndWait(text: string, onComplete?: () => void): void {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      onComplete?.();
+      return;
+    }
+
+    try {
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.rate = 0.9;
+      utter.pitch = 1.0;
+      utter.volume = this.isMuted ? 0 : 1;
+      utter.onend = () => onComplete?.();
+      utter.onerror = () => onComplete?.();
+      window.speechSynthesis.speak(utter);
+    } catch {
+      onComplete?.();
+    }
+  }
+
   toggleMute(): void {
     this.isMuted = !this.isMuted;
   }

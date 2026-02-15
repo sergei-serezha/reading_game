@@ -1,6 +1,8 @@
 import { PlayerProgress, LetterMastery, LevelProgress } from '../types/ProgressTypes';
 
 const STORAGE_KEY = 'reading_game_progress';
+const CURRENT_PROGRESS_VERSION = 2;
+const LEVEL_3_UNLOCK_MIGRATION_VERSION = 2;
 
 export class ProgressManager {
   private progress: PlayerProgress;
@@ -18,7 +20,12 @@ export class ProgressManager {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return null;
-      return JSON.parse(raw) as PlayerProgress;
+      const parsed = JSON.parse(raw) as PlayerProgress;
+      const { progress, changed } = this.migrateProgress(parsed);
+      if (changed) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+      }
+      return progress;
     } catch {
       return null;
     }
@@ -27,18 +34,44 @@ export class ProgressManager {
   private createDefaultProgress(): PlayerProgress {
     const now = Date.now();
     return {
-      version: 1,
+      version: CURRENT_PROGRESS_VERSION,
       totalStars: 0,
       correctCount: 0,
       letterMasteries: {},
       levelProgresses: {
         1: { levelId: 1, isUnlocked: true, segmentsCompleted: 0, totalSegments: 1, starsEarned: 0 },
-        2: { levelId: 2, isUnlocked: false, segmentsCompleted: 0, totalSegments: 1, starsEarned: 0 },
-        3: { levelId: 3, isUnlocked: false, segmentsCompleted: 0, totalSegments: 1, starsEarned: 0 },
+        2: { levelId: 2, isUnlocked: true, segmentsCompleted: 0, totalSegments: 1, starsEarned: 0 },
+        3: { levelId: 3, isUnlocked: true, segmentsCompleted: 0, totalSegments: 1, starsEarned: 0 },
       },
       lastPlayedAt: now,
       createdAt: now,
     };
+  }
+
+  private migrateProgress(progress: PlayerProgress): { progress: PlayerProgress; changed: boolean } {
+    let changed = false;
+
+    // One-time migration: unlock level 3 (and level 2 to match current defaults)
+    if (progress.version < LEVEL_3_UNLOCK_MIGRATION_VERSION) {
+      if (progress.levelProgresses[2]) {
+        if (!progress.levelProgresses[2].isUnlocked) {
+          progress.levelProgresses[2].isUnlocked = true;
+          changed = true;
+        }
+      }
+
+      if (progress.levelProgresses[3]) {
+        if (!progress.levelProgresses[3].isUnlocked) {
+          progress.levelProgresses[3].isUnlocked = true;
+          changed = true;
+        }
+      }
+
+      progress.version = CURRENT_PROGRESS_VERSION;
+      changed = true;
+    }
+
+    return { progress, changed };
   }
 
   masterLetter(letter: string): void {

@@ -43,7 +43,7 @@ export class GameSelectScene extends Phaser.Scene {
     const gapX = 20;
     const gapY = 20;
     const startX = centerX - ((cols - 1) * (cardWidth + gapX)) / 2;
-    const startY = 120;
+    const startY = 140;
 
     ARCADE_GAMES.forEach((game, i) => {
       const col = i % cols;
@@ -101,6 +101,7 @@ export class GameSelectScene extends Phaser.Scene {
           // Route to dedicated scene if available, otherwise generic placeholder
           const dedicatedScenes: Record<string, string> = {
             tron: 'TronGameScene',
+            'pac-man': 'PacManGameScene',
           };
           const targetScene = dedicatedScenes[game.key] ?? 'ArcadeGameScene';
 

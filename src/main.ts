@@ -9,6 +9,7 @@ import { SoundConstructionScene } from './scenes/SoundConstructionScene';
 import { GameSelectScene } from './scenes/GameSelectScene';
 import { ArcadeGameScene } from './scenes/ArcadeGameScene';
 import { TronGameScene } from './scenes/TronGameScene';
+import { PacManGameScene } from './scenes/PacManGameScene';
 import { RewardScene } from './scenes/RewardScene';
 
 const config: Phaser.Types.Core.GameConfig = {
@@ -36,6 +37,7 @@ const config: Phaser.Types.Core.GameConfig = {
     GameSelectScene,
     ArcadeGameScene,
     TronGameScene,
+    PacManGameScene,
     RewardScene,
   ],
 };

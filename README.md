@@ -1,16 +1,28 @@
 # Reading Game
 
-A Phaser + TypeScript early-reading game focused on letter recognition, sequence navigation, and phoneme prompts.
+A Phaser + TypeScript early-reading game focused on letter recognition, sequence navigation, phoneme prompts, and guided word reading.
 
-## Current Gameplay Highlights
+## Features
+- Main menu with About modal content from `assets/about.txt`.
 - Level 1 (`AlphabetJourneyScene`):
-  - Navigate a grid to the next target letter.
-  - Prompt flow: `Say <letter>` -> press `Space` -> knight slashes and letter breaks -> `Let's find <next letter>`.
-- Level 2 (`HiddenSequenceScene`): hidden-letter sequence variant.
-- Level 3 (`SoundConstructionScene`): tap letters in order to build words.
-- Reward loop:
-  - Every 5 correct turns unlocks game selection.
-  - Unlock voice clip is played before redirect (`assets/hooray_5_challenges_v2.wav`).
+  - Navigate to target letters in sequence.
+  - Prompt flow: `Say <letter>` -> `Space` slash -> `Let's find <next letter>`.
+- Level 2 (`HiddenSequenceScene`):
+  - Hidden-letter navigation in sequence order.
+- Level 3 (`SoundConstructionScene`, POC v2):
+  - 3 random words loaded from `assets/words/3-letter-words.txt` and `assets/words/5-letter-words.txt`.
+  - Words appear on rows 2/4/6.
+  - Knight moves up/down; `Space` dispatches monkey helper.
+  - Monkey reads letters with phoneme + pacing, then TTS says `Repeat after me: <word>`.
+  - Knight auto-slashes letters after monkey finishes a line.
+- Arcade reward flow and game-selection scene.
+
+## Documentation
+Full docs are in `docs/`:
+- `docs/README.md` (index)
+- `docs/features/*.md` (feature-by-feature)
+- `docs/systems/*.md` (system-level behavior)
+- `docs/architecture.md`
 
 ## Tech Stack
 - TypeScript
@@ -19,10 +31,11 @@ A Phaser + TypeScript early-reading game focused on letter recognition, sequence
 
 ## Project Structure
 - `src/scenes/` scene flow and game states
-- `src/objects/` gameplay objects (player, tiles, grid, UI objects)
+- `src/objects/` gameplay objects
 - `src/managers/` audio, feedback, input, progress, rewards
 - `src/config/` constants and level configs
-- `assets/` audio and static media
+- `src/types/` interfaces and type contracts
+- `assets/` audio and content files
 
 ## Getting Started
 1. Install dependencies:
@@ -43,16 +56,17 @@ A Phaser + TypeScript early-reading game focused on letter recognition, sequence
    ```
 
 ## Controls
-- Arrow keys: move between adjacent highlighted tiles
-- Mouse/touch: tap highlighted tiles
-- Space (Level 1 correct letter state): perform sword slash
-
-## Audio Notes
-- Audio assets are loaded in `src/scenes/BootScene.ts`.
-- New runtime audio must be preloaded there before use.
-- Prompt chaining should prefer completion-based sequencing for reliability.
+- Main menu:
+  - `Enter`/`Space`: open level select
+- Level 1 and 2:
+  - Arrow/WASD/swipe/tap for movement
+  - Level 1: `Space` to slash after correct landing
+- Level 3:
+  - `UP/DOWN` to select word line
+  - `Space` to dispatch monkey helper
 
 ## Development Notes
-- Keep changes child-flow safe: prompt -> action -> feedback -> next prompt.
+- Keep child flow stable: prompt -> action -> feedback -> next prompt.
+- Preload all new runtime assets in `BootScene`.
+- Use completion-based audio chaining for critical prompt sequences.
 - Run `npm run build` before committing.
-- If adding VO/FX assets, verify key names in `AudioManager` and preload keys in `BootScene`.

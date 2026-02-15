@@ -72,6 +72,8 @@ export class BootScene extends Phaser.Scene {
 
   private loadTextAssets(): void {
     this.load.text('content/about', 'assets/about.txt');
+    this.load.text('content/words3', 'assets/words/3-letter-words.txt');
+    this.load.text('content/words5', 'assets/words/5-letter-words.txt');
   }
 
   create(): void {

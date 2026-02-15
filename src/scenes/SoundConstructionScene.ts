@@ -1,73 +1,89 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, COLORS, FONT_FAMILY, TILE_SIZE, TILE_GAP, FEEDBACK_DELAY_MS } from '../config/Constants';
-import { LevelConfig } from '../types/LevelTypes';
+import { GAME_WIDTH, GAME_HEIGHT, COLORS, FONT_FAMILY, TILE_SIZE, TILE_GAP } from '../config/Constants';
+import { LevelConfig, GridPosition } from '../types/LevelTypes';
 import { LetterTile, LetterTileState } from '../objects/LetterTile';
+import { PlayerCharacter } from '../objects/PlayerCharacter';
+import { MonkeyHelper } from '../objects/MonkeyHelper';
 import { ProgressBar } from '../objects/ProgressBar';
+import { InputManager, Direction } from '../managers/InputManager';
 import { AudioManager } from '../managers/AudioManager';
 import { FeedbackManager } from '../managers/FeedbackManager';
-import { RewardTracker } from '../managers/RewardTracker';
 import { ProgressManager } from '../managers/ProgressManager';
 
+interface WordLine {
+  word: string;
+  row: number;
+  startCol: number;
+  endCol: number;
+  landingCol: number;
+  tiles: LetterTile[];
+  complete: boolean;
+}
+
+interface Level3ResumeData {
+  levelConfig: LevelConfig;
+  completeOnEnter?: boolean;
+}
+
+const GRID_COLS = 7;
+const GRID_ROWS = 6;
+const WORD_ROWS = [1, 3, 5];
+const WORD_START_COL = 1;
+const ARCADE_UNLOCK_WORDS = 3;
+
 /**
- * Level 3: Sound Construction
- *
- * The child sees letter tiles and must tap them in the correct
- * sequence to build words one at a time.
- *
- * Supports multiple target words (e.g., "CAT" then "BED").
- * After each word is completed, a mini-celebration plays,
- * tiles reset for the next word. After all words are done,
- * the level completes.
+ * Level 3 POC:
+ * - 3 random words from word files, placed on rows 2,4,6
+ * - Knight moves up/down between rows
+ * - Space sends monkey to read letters, then knight slashes the row
  */
 export class SoundConstructionScene extends Phaser.Scene {
   private levelConfig: LevelConfig;
+  private completeOnEnter: boolean = false;
+
   private audioManager: AudioManager;
   private feedbackManager: FeedbackManager;
-  private rewardTracker: RewardTracker;
   private progressManager: ProgressManager;
+
+  private inputManager: InputManager;
+  private spaceKey: Phaser.Input.Keyboard.Key | null = null;
   private progressBar: ProgressBar;
+  private player: PlayerCharacter;
+  private monkey: MonkeyHelper;
+  private hintText: Phaser.GameObjects.Text;
 
-  private letterTiles: LetterTile[] = [];
-  private sequence: string[] = [];
-  private sequenceIndex: number = 0;
+  private selectedWords: string[] = [];
+  private lines: WordLine[] = [];
+  private tilesByPos: Map<string, LetterTile> = new Map();
+
+  private currentLineIndex: number = 0;
+  private wordsCompleted: number = 0;
   private isProcessing: boolean = false;
-
-  private targetWords: string[] = [];
-  private currentWordIndex: number = 0;
-  private currentWordStart: number = 0; // index into sequence where current word starts
-
-  private wordDisplay: Phaser.GameObjects.Text;
-  private wordLabel: Phaser.GameObjects.Text;
-  private builtWord: string = '';
+  private arcadeUnlocked: boolean = false;
+  private monkeyJumpDurationMs: number = 140;
 
   constructor() {
     super({ key: 'SoundConstructionScene' });
   }
 
-  init(data: { levelConfig: LevelConfig }): void {
+  init(data: Level3ResumeData): void {
     this.levelConfig = data.levelConfig;
+    this.completeOnEnter = data.completeOnEnter ?? false;
   }
 
   create(): void {
-    // Get shared managers
     this.audioManager = this.registry.get('audioManager') as AudioManager;
     this.feedbackManager = this.registry.get('feedbackManager') as FeedbackManager;
-    this.rewardTracker = this.registry.get('rewardTracker') as RewardTracker;
     this.progressManager = this.registry.get('progressManager') as ProgressManager;
 
     this.audioManager.setScene(this);
     this.feedbackManager.setScene(this);
 
-    this.sequence = [...this.levelConfig.sequence];
-    this.sequenceIndex = 0;
-    this.builtWord = '';
-    this.letterTiles = [];
+    if (this.completeOnEnter) {
+      this.handleReturnFromArcade();
+      return;
+    }
 
-    this.targetWords = [...(this.levelConfig.targetWords ?? [])];
-    this.currentWordIndex = 0;
-    this.currentWordStart = 0;
-
-    // Level title
     this.add.text(GAME_WIDTH / 2, 30, this.levelConfig.levelName, {
       fontFamily: FONT_FAMILY,
       fontSize: '20px',
@@ -76,318 +92,324 @@ export class SoundConstructionScene extends Phaser.Scene {
       strokeThickness: 3,
     }).setOrigin(0.5);
 
-    // Instruction text
-    this.add.text(GAME_WIDTH / 2, 60, 'Tap the letters in order to build the word!', {
+    this.add.text(GAME_WIDTH / 2, 60, 'Use UP/DOWN. Press SPACE to send monkey helper.', {
       fontFamily: FONT_FAMILY,
       fontSize: '10px',
       color: COLORS.TEXT_PRIMARY,
-    }).setOrigin(0.5).setAlpha(0.7);
+    }).setOrigin(0.5).setAlpha(0.75);
 
-    // Target word label (shows what word they're currently building)
-    this.wordLabel = this.add.text(GAME_WIDTH / 2, 110, '', {
-      fontFamily: FONT_FAMILY,
-      fontSize: '16px',
-      color: COLORS.TEXT_PRIMARY,
-      stroke: '#000000',
-      strokeThickness: 2,
-    }).setOrigin(0.5).setAlpha(0.5);
+    this.selectedWords = this.pickRandomWords();
+    this.lines = this.selectedWords.map((word, i) => ({
+      word,
+      row: WORD_ROWS[i],
+      startCol: WORD_START_COL,
+      endCol: WORD_START_COL + word.length - 1,
+      landingCol: WORD_START_COL + word.length,
+      tiles: [],
+      complete: false,
+    }));
 
-    // Word building display — shows assembled letters so far
-    this.wordDisplay = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 80, '', {
+    this.buildGrid();
+
+    const start = this.gridToPixel({ row: this.lines[0].row, col: 0 });
+    this.player = new PlayerCharacter(this, start.x, start.y);
+    this.player.setDepth(20);
+
+    this.monkey = new MonkeyHelper(this, start.x + 26, start.y - 8);
+    this.monkey.setDepth(21);
+
+    this.hintText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 22, '', {
       fontFamily: FONT_FAMILY,
-      fontSize: '48px',
+      fontSize: '12px',
       color: COLORS.TEXT_ACCENT,
       stroke: '#000000',
-      strokeThickness: 5,
-    }).setOrigin(0.5);
+      strokeThickness: 3,
+      align: 'center',
+    }).setOrigin(0.5).setDepth(60);
 
-    // Build letter tiles in a row
-    this.buildLetterTiles();
-
-    // Setup for the first word
-    this.setupCurrentWord();
-
-    // Progress bar
     this.progressBar = new ProgressBar(this, GAME_WIDTH - 230, GAME_HEIGHT - 30, 200, 18);
     this.progressBar.setDepth(50);
-    const progress = this.rewardTracker.getProgress();
-    this.progressBar.updateProgress(progress.current, progress.target);
+    this.progressBar.updateProgress(this.wordsCompleted, ARCADE_UNLOCK_WORDS);
+
+    this.inputManager = new InputManager(this);
+    this.inputManager.enable();
+    this.spaceKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE) ?? null;
+
+    this.refreshSelectableLineVisuals();
+    this.updateHintText();
   }
 
-  private buildLetterTiles(): void {
-    const letters = this.levelConfig.letters;
-    const cellSize = TILE_SIZE + TILE_GAP;
-    const totalWidth = (letters.length - 1) * cellSize;
-    const startX = (GAME_WIDTH - totalWidth) / 2;
-    const y = GAME_HEIGHT / 2 + 40;
+  update(): void {
+    if (this.isProcessing || this.completeOnEnter) return;
 
-    for (let i = 0; i < letters.length; i++) {
-      const config = letters[i];
-      const x = startX + i * cellSize;
+    if (this.spaceKey && Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+      const line = this.lines[this.currentLineIndex];
+      if (!line || line.complete) return;
+      this.startLineSequence(this.currentLineIndex);
+      return;
+    }
 
-      const tile = new LetterTile(
-        this,
-        x,
-        y,
-        config.letter,
-        0,
-        i,
-        false,
-      );
+    const dir = this.inputManager.consumeDirection();
+    if (dir === Direction.UP) {
+      this.moveBetweenLines(-1);
+    } else if (dir === Direction.DOWN) {
+      this.moveBetweenLines(1);
+    }
+  }
 
-      tile.setTileState(LetterTileState.DISABLED);
-      this.add.existing(tile);
-
-      // Setup tap handler
-      tile.on('pointerdown', () => {
-        this.handleTileTap(tile, i);
+  private handleReturnFromArcade(): void {
+    this.feedbackManager.playLevelComplete();
+    this.time.delayedCall(600, () => {
+      this.scene.start('RewardScene', {
+        message: 'You completed 3 words!',
+        nextScene: 'LevelSelectScene',
       });
-
-      this.letterTiles.push(tile);
-    }
+    });
   }
 
-  /** Prepare the UI for the current word: update label, reset tiles, highlight active ones */
-  private setupCurrentWord(): void {
-    const currentWord = this.targetWords[this.currentWordIndex] ?? '';
-    this.wordLabel.setText(`Build: ${currentWord}`);
-    this.builtWord = '';
-    this.wordDisplay.setText('');
-    this.wordDisplay.setAlpha(1);
+  private moveBetweenLines(delta: number): void {
+    const next = Phaser.Math.Clamp(this.currentLineIndex + delta, 0, this.lines.length - 1);
+    if (next === this.currentLineIndex) return;
 
-    // Figure out which tiles belong to this word
-    const wordLen = currentWord.length;
-    this.currentWordStart = 0;
-    for (let w = 0; w < this.currentWordIndex; w++) {
-      this.currentWordStart += (this.targetWords[w]?.length ?? 0);
-    }
+    this.isProcessing = true;
+    const p = this.gridToPixel({ row: this.lines[next].row, col: 0 });
+    this.player.moveToPosition(p.x, p.y, () => {
+      this.currentLineIndex = next;
+      this.monkey.followKnight(p.x, p.y);
+      this.isProcessing = false;
+      this.refreshSelectableLineVisuals();
+      this.updateHintText();
+    });
+  }
 
-    // Reset all tiles: disable tiles not in current word, set current word tiles to normal
-    for (let i = 0; i < this.letterTiles.length; i++) {
-      if (i >= this.currentWordStart && i < this.currentWordStart + wordLen) {
-        this.letterTiles[i].setTileState(LetterTileState.NORMAL);
-      } else {
-        this.letterTiles[i].setTileState(
-          i < this.currentWordStart ? LetterTileState.COMPLETED : LetterTileState.DISABLED
-        );
+  private buildGrid(): void {
+    for (let row = 0; row < GRID_ROWS; row++) {
+      for (let col = 0; col < GRID_COLS; col++) {
+        let letter = '';
+
+        for (const line of this.lines) {
+          if (row === line.row && col >= line.startCol && col <= line.endCol) {
+            letter = line.word[col - line.startCol];
+            break;
+          }
+        }
+
+        const isEmpty = letter === '';
+        const p = this.gridToPixel({ row, col });
+        const tile = new LetterTile(this, p.x, p.y, letter, row, col, isEmpty);
+
+        if (isEmpty) {
+          tile.setTileState(LetterTileState.EMPTY);
+        } else {
+          tile.setTileState(LetterTileState.NORMAL);
+          const line = this.lines.find(l => l.row === row);
+          if (line) line.tiles.push(tile);
+        }
+
+        this.add.existing(tile);
+        this.tilesByPos.set(this.keyFor(row, col), tile);
       }
     }
-
-    this.showTargetHint();
-    this.updateTileStates();
   }
 
-  private handleTileTap(tile: LetterTile, index: number): void {
-    if (this.isProcessing) return;
+  private startLineSequence(lineIndex: number): void {
+    const line = this.lines[lineIndex];
+    if (!line || line.complete || line.tiles.length === 0) return;
 
-    const st = tile.getTileState();
-    if (st === LetterTileState.COMPLETED || st === LetterTileState.DISABLED) return;
-
-    const expectedLetter = this.sequence[this.sequenceIndex];
-
-    if (tile.letter === expectedLetter) {
-      this.handleCorrectTap(tile);
-    } else {
-      this.handleIncorrectTap(tile);
-    }
-  }
-
-  private handleCorrectTap(tile: LetterTile): void {
     this.isProcessing = true;
+    this.clearHighlights();
 
-    // Play phoneme
-    this.audioManager.playPhoneme(tile.letter);
+    const first = line.tiles[0];
+    this.monkey.jumpTo(first.x, first.y - 18, () => {
+      this.processLineLetter(line, 0);
+    }, this.monkeyJumpDurationMs);
+  }
 
-    // Mark completed
-    tile.setTileState(LetterTileState.COMPLETED);
-    tile.playSelectAnimation();
+  private processLineLetter(line: WordLine, letterIndex: number): void {
+    const tile = line.tiles[letterIndex];
+    if (!tile) {
+      this.finishMonkeyRead(line);
+      return;
+    }
 
-    // Visual feedback
-    this.feedbackManager.playCorrect(tile.x, tile.y);
+    this.audioManager.playPhonemeAndWait(tile.letter, () => {
+      this.time.delayedCall(500, () => {
+        tile.setTileState(LetterTileState.COMPLETED);
+        this.progressManager.masterLetter(tile.letter);
 
-    // Add letter to word display
-    this.builtWord += tile.letter;
-    this.wordDisplay.setText(this.builtWord);
-
-    // Animate the word display
-    this.tweens.add({
-      targets: this.wordDisplay,
-      scaleX: 1.15,
-      scaleY: 1.15,
-      duration: 150,
-      yoyo: true,
-      ease: 'Back.easeOut',
+        const next = line.tiles[letterIndex + 1];
+        if (next) {
+          this.monkey.jumpTo(next.x, next.y - 18, () => {
+            this.processLineLetter(line, letterIndex + 1);
+          }, this.monkeyJumpDurationMs);
+        } else {
+          this.finishMonkeyRead(line);
+        }
+      });
     });
+  }
 
-    // Record progress
-    this.progressManager.masterLetter(tile.letter);
-    const earnedArcade = this.rewardTracker.recordCorrect();
+  private finishMonkeyRead(line: WordLine): void {
+    this.time.delayedCall(500, () => {
+      const landing = this.tileAt(line.row, line.landingCol);
+      const lx = landing?.x ?? this.gridToPixel({ row: line.row, col: line.landingCol }).x;
+      const ly = landing?.y ?? this.gridToPixel({ row: line.row, col: line.landingCol }).y;
 
-    // Update progress bar
-    const progress = this.rewardTracker.getProgress();
-    this.progressBar.updateProgress(progress.current, progress.target);
+      this.monkey.jumpTo(lx, ly - 18, () => {
+        this.audioManager.speakTextAndWait(`Repeat after me: ${line.word}`, () => {
+          this.runKnightSlashSequence(line, line.startCol);
+        });
+      }, this.monkeyJumpDurationMs);
+    });
+  }
 
-    // Advance sequence
-    this.sequenceIndex++;
+  private runKnightSlashSequence(line: WordLine, currentCol: number): void {
+    if (currentCol > line.endCol) {
+      this.finishLine(line);
+      return;
+    }
 
-    // Check if earned arcade game
-    if (earnedArcade) {
+    const target = this.gridToPixel({ row: line.row, col: currentCol });
+    this.player.moveToPosition(target.x, target.y, () => {
+      const tile = this.tileAt(line.row, currentCol);
+      this.player.playSlashAnimation(() => {
+        if (!tile || tile.isEmpty) {
+          this.runKnightSlashSequence(line, currentCol + 1);
+          return;
+        }
+
+        tile.playSlashBreakAnimation(() => {
+          this.runKnightSlashSequence(line, currentCol + 1);
+        });
+      });
+    });
+  }
+
+  private finishLine(line: WordLine): void {
+    line.complete = true;
+    this.wordsCompleted++;
+    this.progressBar.updateProgress(this.wordsCompleted, ARCADE_UNLOCK_WORDS);
+
+    if (this.wordsCompleted >= ARCADE_UNLOCK_WORDS && !this.arcadeUnlocked) {
+      this.arcadeUnlocked = true;
+      this.progressManager.completeLevel(this.levelConfig.levelId);
+      this.progressManager.save();
       this.audioManager.playArcadeUnlock(() => {
         this.handleArcadeReward();
       });
       return;
     }
 
-    // Check if current word is complete
-    const currentWord = this.targetWords[this.currentWordIndex] ?? '';
-    if (this.builtWord.length >= currentWord.length) {
-      this.time.delayedCall(FEEDBACK_DELAY_MS, () => {
-        this.handleWordComplete();
-      });
-    } else {
-      this.time.delayedCall(300, () => {
-        this.showTargetHint();
-        this.updateTileStates();
-        this.isProcessing = false;
-      });
-    }
-  }
-
-  private handleIncorrectTap(tile: LetterTile): void {
-    tile.playRejectAnimation();
-    this.audioManager.playError();
-    this.feedbackManager.showFloatingText(tile.x, tile.y - 50, 'Try again!');
-  }
-
-  private handleWordComplete(): void {
-    // Play the full word sound
-    const currentWord = this.targetWords[this.currentWordIndex];
-    if (currentWord) {
-      this.audioManager.playWord(currentWord.toLowerCase());
-    }
-
-    // Mini celebration for the word
-    this.feedbackManager.emitStarBurst(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 80, 12);
-    this.feedbackManager.showFloatingText(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 120, `${currentWord}!`);
-
-    // Move to the next word or finish
-    this.currentWordIndex++;
-
-    if (this.currentWordIndex < this.targetWords.length) {
-      // More words to build — brief pause, then set up next word
-      this.time.delayedCall(1500, () => {
-        this.setupCurrentWord();
-        this.isProcessing = false;
-      });
-    } else {
-      // All words done — level complete!
+    const nextLineIndex = this.lines.findIndex(l => !l.complete);
+    if (nextLineIndex === -1) {
       this.handleLevelComplete();
+      return;
     }
-  }
 
-  private handleLevelComplete(): void {
-    this.feedbackManager.playLevelComplete();
-
-    // Show final celebration with all words
-    const allWords = this.targetWords.join(' + ');
-    const celebrationText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 80, allWords, {
-      fontFamily: FONT_FAMILY,
-      fontSize: '48px',
-      color: COLORS.TEXT_ACCENT,
-      stroke: '#000000',
-      strokeThickness: 6,
-    }).setOrigin(0.5).setAlpha(0).setDepth(100);
-
-    this.tweens.add({
-      targets: this.wordDisplay,
-      alpha: 0,
-      duration: 300,
-    });
-
-    this.tweens.add({
-      targets: celebrationText,
-      alpha: 1,
-      scaleX: 1.2,
-      scaleY: 1.2,
-      duration: 600,
-      ease: 'Back.easeOut',
-      onComplete: () => {
-        this.tweens.add({
-          targets: celebrationText,
-          scaleX: 1.0,
-          scaleY: 1.0,
-          duration: 400,
-          yoyo: true,
-          repeat: 2,
-          ease: 'Sine.inOut',
-        });
-      },
-    });
-
-    this.time.delayedCall(800, () => {
-      this.feedbackManager.showFloatingText(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20, 'You spelled them all!');
-    });
-
-    this.progressManager.completeLevel(this.levelConfig.levelId);
-    this.progressManager.save();
-
-    this.time.delayedCall(3000, () => {
-      this.scene.start('RewardScene', {
-        message: `You built: ${allWords}!`,
-        nextScene: 'LevelSelectScene',
-      });
+    const p = this.gridToPixel({ row: this.lines[nextLineIndex].row, col: 0 });
+    this.player.moveToPosition(p.x, p.y, () => {
+      this.currentLineIndex = nextLineIndex;
+      this.monkey.followKnight(p.x, p.y);
+      this.isProcessing = false;
+      this.refreshSelectableLineVisuals();
+      this.updateHintText();
     });
   }
 
   private handleArcadeReward(): void {
     this.scene.start('GameSelectScene', {
       returnScene: 'SoundConstructionScene',
-      returnData: { levelConfig: this.levelConfig },
+      returnData: {
+        levelConfig: this.levelConfig,
+        completeOnEnter: true,
+      },
     });
   }
 
-  private showTargetHint(): void {
-    this.children.getByName('targetHint')?.destroy();
+  private handleLevelComplete(): void {
+    this.feedbackManager.playLevelComplete();
+    this.progressManager.completeLevel(this.levelConfig.levelId);
+    this.progressManager.save();
 
-    if (this.sequenceIndex >= this.sequence.length) return;
-
-    const target = this.sequence[this.sequenceIndex];
-    const hint = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 50, `Tap: ${target}`, {
-      fontFamily: FONT_FAMILY,
-      fontSize: '16px',
-      color: COLORS.TEXT_ACCENT,
-      stroke: '#000000',
-      strokeThickness: 3,
-    }).setOrigin(0.5).setName('targetHint');
-
-    this.tweens.add({
-      targets: hint,
-      alpha: 0.6,
-      duration: 800,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.inOut',
+    this.time.delayedCall(2000, () => {
+      this.scene.start('RewardScene', {
+        message: `You read: ${this.selectedWords.join(', ')}`,
+        nextScene: 'LevelSelectScene',
+      });
     });
   }
 
-  private updateTileStates(): void {
-    const expectedLetter = this.sequence[this.sequenceIndex];
-    const currentWord = this.targetWords[this.currentWordIndex] ?? '';
-    const wordEnd = this.currentWordStart + currentWord.length;
+  private updateHintText(): void {
+    const line = this.lines[this.currentLineIndex];
+    if (!line) return;
 
-    for (let i = 0; i < this.letterTiles.length; i++) {
-      const tile = this.letterTiles[i];
-      const st = tile.getTileState();
-      if (st === LetterTileState.COMPLETED || st === LetterTileState.DISABLED) continue;
+    if (line.complete) {
+      this.hintText.setText('Line complete. Use UP/DOWN to choose another word.');
+      return;
+    }
 
-      // Only tiles in the current word range can be highlighted
-      if (i >= this.currentWordStart && i < wordEnd) {
-        if (tile.letter === expectedLetter) {
-          tile.setTileState(LetterTileState.HIGHLIGHTED);
-        } else {
+    this.hintText.setText(`Line ${this.currentLineIndex + 1}: ${line.word}  •  Press SPACE`);
+  }
+
+  private refreshSelectableLineVisuals(): void {
+    for (let i = 0; i < this.lines.length; i++) {
+      const line = this.lines[i];
+      for (const tile of line.tiles) {
+        if (line.complete) continue;
+        tile.setTileState(i === this.currentLineIndex ? LetterTileState.HIGHLIGHTED : LetterTileState.NORMAL);
+      }
+    }
+  }
+
+  private clearHighlights(): void {
+    for (const line of this.lines) {
+      if (line.complete) continue;
+      for (const tile of line.tiles) {
+        if (tile.getTileState() === LetterTileState.HIGHLIGHTED) {
           tile.setTileState(LetterTileState.NORMAL);
         }
       }
     }
+  }
+
+  private pickRandomWords(): string[] {
+    const words3 = this.parseWordList('content/words3');
+    const words5 = this.parseWordList('content/words5');
+    const uniquePool = Array.from(new Set([...words3, ...words5]));
+
+    const fallback = ['CAT', 'DOG', 'APPLE', 'WATER', 'SUN'];
+    const pool = uniquePool.length >= 3 ? uniquePool : Array.from(new Set([...uniquePool, ...fallback]));
+
+    const shuffled = Phaser.Utils.Array.Shuffle([...pool]);
+    return shuffled.slice(0, 3);
+  }
+
+  private parseWordList(cacheKey: string): string[] {
+    const raw = this.cache.text.get(cacheKey) as string | undefined;
+    if (!raw) return [];
+
+    return raw
+      .split(/\r?\n/)
+      .map(w => w.trim().toUpperCase())
+      .filter(w => /^[A-Z]+$/.test(w));
+  }
+
+  private gridToPixel(pos: GridPosition): { x: number; y: number } {
+    const cellSize = TILE_SIZE + TILE_GAP;
+    const startX = GAME_WIDTH / 2 - ((GRID_COLS - 1) * cellSize) / 2;
+    const startY = GAME_HEIGHT / 2 - 20 - ((GRID_ROWS - 1) * cellSize) / 2;
+
+    return {
+      x: startX + pos.col * cellSize,
+      y: startY + pos.row * cellSize,
+    };
+  }
+
+  private tileAt(row: number, col: number): LetterTile | null {
+    return this.tilesByPos.get(this.keyFor(row, col)) ?? null;
+  }
+
+  private keyFor(row: number, col: number): string {
+    return `${row}-${col}`;
   }
 }

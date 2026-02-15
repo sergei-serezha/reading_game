@@ -1,0 +1,10 @@
+cat
+dog
+run
+sun
+hat
+mom
+dad
+bed
+big
+you
