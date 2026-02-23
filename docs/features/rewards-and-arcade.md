@@ -3,8 +3,11 @@
 ## Components
 - Reward tracking: `src/managers/RewardTracker.ts`
 - Arcade selection scene: `src/scenes/GameSelectScene.ts`
-- Arcade placeholder: `src/scenes/ArcadeGameScene.ts`
+- Arcade fallback/placeholder: `src/scenes/ArcadeGameScene.ts`
 - Tron implementation: `src/scenes/TronGameScene.ts`
+- Pac-Man implementation: `src/scenes/PacManGameScene.ts`
+- Frogger implementation: `src/scenes/FroggerGameScene.ts`
+- Livi Kong implementation: `src/scenes/LiviKongGameScene.ts`
 - Reward transition scene: `src/scenes/RewardScene.ts`
 
 ## Current Behavior
@@ -19,5 +22,12 @@
 1. Unlock threshold reached.
 2. Unlock audio plays.
 3. Route to `GameSelectScene`.
-4. Selected arcade scene eventually routes through `RewardScene`.
-5. Return to originating scene with optional resume data.
+4. Selected arcade tile routes by game key:
+   - `tron` -> `TronGameScene`
+   - `pac-man` -> `PacManGameScene`
+   - `frogger` -> `FroggerGameScene`
+   - `livi-kong` -> `LiviKongGameScene`
+   - other keys -> `ArcadeGameScene`
+5. `ArcadeGameScene` also contains a defensive redirect for known keys (`tron`, `pac-man`, `frogger`, `livi-kong`) to avoid stale "Coming Soon" paths.
+6. Selected arcade scene eventually routes through `RewardScene`.
+7. Return to originating scene with optional resume data.

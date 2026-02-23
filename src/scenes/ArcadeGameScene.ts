@@ -20,6 +20,24 @@ export class ArcadeGameScene extends Phaser.Scene {
   }
 
   create(): void {
+    const dedicatedScenes: Record<string, string> = {
+      tron: 'TronGameScene',
+      'pac-man': 'PacManGameScene',
+      frogger: 'FroggerGameScene',
+      'livi-kong': 'LiviKongGameScene',
+      'donkey-kong': 'LiviKongGameScene',
+    };
+
+    const dedicatedTarget = dedicatedScenes[this.gameConfig.key];
+    if (dedicatedTarget) {
+      this.scene.start(dedicatedTarget, {
+        gameConfig: this.gameConfig,
+        returnScene: this.returnScene,
+        returnData: this.returnData,
+      });
+      return;
+    }
+
     const centerX = GAME_WIDTH / 2;
     const centerY = GAME_HEIGHT / 2;
 

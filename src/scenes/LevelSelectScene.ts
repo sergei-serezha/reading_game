@@ -128,6 +128,9 @@ export class LevelSelectScene extends Phaser.Scene {
         const dedicatedScenes: Record<string, string> = {
           tron: 'TronGameScene',
           'pac-man': 'PacManGameScene',
+          frogger: 'FroggerGameScene',
+          'livi-kong': 'LiviKongGameScene',
+          'donkey-kong': 'LiviKongGameScene',
         };
         const targetScene = dedicatedScenes[game.key] ?? 'ArcadeGameScene';
 

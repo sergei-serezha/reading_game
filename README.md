@@ -16,6 +16,11 @@ A Phaser + TypeScript early-reading game focused on letter recognition, sequence
   - Monkey reads letters with phoneme + pacing, then TTS says `Repeat after me: <word>`.
   - Knight auto-slashes letters after monkey finishes a line.
 - Arcade reward flow and game-selection scene.
+- Arcade playable scenes:
+  - `TronGameScene`
+  - `PacManGameScene` (ghost-speed slider)
+  - `FroggerGameScene` (car-speed slider)
+  - `LiviKongGameScene` (barrels, potholes, jump/hide, speed slider)
 
 ## Documentation
 Full docs are in `docs/`:
@@ -64,6 +69,16 @@ Full docs are in `docs/`:
 - Level 3:
   - `UP/DOWN` to select word line
   - `Space` to dispatch monkey helper
+- Pac-Man:
+  - `UP/DOWN/LEFT/RIGHT` or `W/A/S/D` to move
+  - Slider adjusts ghost speed (left faster, right slower)
+- Frogger:
+  - `UP/DOWN/LEFT/RIGHT` or `W/A/S/D` to move
+  - Slider adjusts car speed (left slower, right faster)
+- Livi Kong:
+  - `LEFT/RIGHT` or `A/D` to move Mario
+  - `UP` or `W` to jump (over barrels or out of potholes)
+  - Slider adjusts barrel speed (left slow, right fast)
 
 ## Development Notes
 - Keep child flow stable: prompt -> action -> feedback -> next prompt.

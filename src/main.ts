@@ -10,6 +10,8 @@ import { GameSelectScene } from './scenes/GameSelectScene';
 import { ArcadeGameScene } from './scenes/ArcadeGameScene';
 import { TronGameScene } from './scenes/TronGameScene';
 import { PacManGameScene } from './scenes/PacManGameScene';
+import { FroggerGameScene } from './scenes/FroggerGameScene';
+import { LiviKongGameScene } from './scenes/LiviKongGameScene';
 import { RewardScene } from './scenes/RewardScene';
 
 const config: Phaser.Types.Core.GameConfig = {
@@ -38,6 +40,8 @@ const config: Phaser.Types.Core.GameConfig = {
     ArcadeGameScene,
     TronGameScene,
     PacManGameScene,
+    FroggerGameScene,
+    LiviKongGameScene,
     RewardScene,
   ],
 };

@@ -12,10 +12,12 @@ Tracks:
 Storage:
 - browser `localStorage`
 - key: `reading_game_progress`
+- includes versioned migration support (`version` field in saved payload)
 
 ## Level Unlock Policy
-- Level 1 unlocked by default.
-- Completing a level unlocks the next level.
+- Current defaults unlock Levels 1, 2, and 3.
+- Completing a level still unlocks the next level as normal progression behavior.
+- One-time migration upgrades existing saves to unlock Levels 2 and 3 (`ProgressManager` migration to version `2`).
 
 ## Reward Tracker
 Source: `src/managers/RewardTracker.ts`

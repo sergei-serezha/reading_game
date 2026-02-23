@@ -32,6 +32,9 @@ Registered in `src/main.ts`:
 - `GameSelectScene`
 - `ArcadeGameScene`
 - `TronGameScene`
+- `PacManGameScene`
+- `FroggerGameScene`
+- `LiviKongGameScene`
 - `RewardScene`
 
 ## Shared Manager Lifecycle
