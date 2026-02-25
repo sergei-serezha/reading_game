@@ -30,7 +30,7 @@ export class LetterTile extends Phaser.GameObjects.Container {
   private bg: Phaser.GameObjects.Rectangle;
   private letterText: Phaser.GameObjects.Text | null = null;
   private border: Phaser.GameObjects.Rectangle;
-  private isBroken: boolean = false;
+  public isBroken: boolean = false;
 
   constructor(
     scene: Phaser.Scene,

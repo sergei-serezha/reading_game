@@ -39,3 +39,12 @@ export const FONT_FAMILY = '"Press Start 2P", "Courier New", monospace';
 // Audio
 export const MUSIC_VOLUME = 0.3;
 export const SFX_VOLUME = 0.7;
+export const SAY_TO_LETTER_DELAY_MS = 350;
+export const LETS_FIND_TO_LETTER_DELAY_MS = 240;
+
+export function getSayDelay(): number {
+  return parseInt(localStorage.getItem('dbg_say_delay') ?? String(SAY_TO_LETTER_DELAY_MS), 10);
+}
+export function getLetsFindDelay(): number {
+  return parseInt(localStorage.getItem('dbg_letsfind_delay') ?? String(LETS_FIND_TO_LETTER_DELAY_MS), 10);
+}

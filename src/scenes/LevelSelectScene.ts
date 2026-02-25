@@ -1,13 +1,14 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT, COLORS, FONT_FAMILY } from '../config/Constants';
 import { ProgressManager } from '../managers/ProgressManager';
-import { LEVEL_1_CONFIG, LEVEL_2_CONFIG, LEVEL_3_CONFIG } from '../config/LevelConfigs';
+import { LEVEL_1_CONFIG, LEVEL_2_CONFIG, LEVEL_3_CONFIG, generateLevel1Config } from '../config/LevelConfigs';
 import { ARCADE_GAMES } from '../config/ArcadeGameConfigs';
 import { LevelConfig } from '../types/LevelTypes';
 
 interface LevelButton {
   config: LevelConfig;
   label: string;
+  configFn?: () => LevelConfig;
 }
 
 export class LevelSelectScene extends Phaser.Scene {
@@ -29,7 +30,7 @@ export class LevelSelectScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     const levels: LevelButton[] = [
-      { config: LEVEL_1_CONFIG, label: '1' },
+      { config: LEVEL_1_CONFIG, label: '1', configFn: generateLevel1Config },
       { config: LEVEL_2_CONFIG, label: '2' },
       { config: LEVEL_3_CONFIG, label: '3' },
     ];
@@ -73,7 +74,8 @@ export class LevelSelectScene extends Phaser.Scene {
         });
 
         btn.on('pointerdown', () => {
-          this.scene.start(level.config.sceneKey, { levelConfig: level.config });
+          const cfg = level.configFn ? level.configFn() : level.config;
+          this.scene.start(cfg.sceneKey, { levelConfig: cfg });
         });
       } else {
         // Lock icon

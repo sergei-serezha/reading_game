@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, COLORS, FONT_FAMILY } from '../config/Constants';
+import { GAME_WIDTH, GAME_HEIGHT, COLORS, FONT_FAMILY, getSayDelay, getLetsFindDelay } from '../config/Constants';
+import { AudioDebugOverlay } from '../objects/AudioDebugOverlay';
 import { LevelConfig, GridPosition } from '../types/LevelTypes';
 import { LetterGrid } from '../objects/LetterGrid';
 import { LetterTile, LetterTileState } from '../objects/LetterTile';
@@ -22,8 +23,6 @@ import { ProgressManager } from '../managers/ProgressManager';
  * Stepping on the wrong hidden tile plays a gentle "not yet" feedback.
  */
 export class HiddenSequenceScene extends Phaser.Scene {
-  private static readonly SAY_TO_LETTER_DELAY_MS = 550;
-  private static readonly LETS_FIND_TO_LETTER_DELAY_MS = 440;
   private levelConfig: LevelConfig;
   private grid: LetterGrid;
   private player: PlayerCharacter;
@@ -35,6 +34,7 @@ export class HiddenSequenceScene extends Phaser.Scene {
   private progressBar: ProgressBar;
   private currentPosition: GridPosition;
   private isProcessing: boolean = false;
+  private audioDebugOverlay: AudioDebugOverlay | null = null;
 
   constructor() {
     super({ key: 'HiddenSequenceScene' });
@@ -105,6 +105,15 @@ export class HiddenSequenceScene extends Phaser.Scene {
     // Setup input
     this.inputManager = new InputManager(this);
     this.inputManager.enable();
+    this.input.keyboard?.on('keydown-BACKTICK', () => {
+      if (this.audioDebugOverlay) {
+        this.audioDebugOverlay.destroy();
+        this.audioDebugOverlay = null;
+      } else {
+        this.audioDebugOverlay = new AudioDebugOverlay(this);
+      }
+    });
+    this.events.on('audioDebugOverlayClosed', () => { this.audioDebugOverlay = null; });
 
     // Setup tap-on-tile
     this.setupTileTapHandlers();
@@ -312,7 +321,7 @@ export class HiddenSequenceScene extends Phaser.Scene {
   /** Play "Say" voice clip followed by the letter's phoneme sound */
   private playSayThenPhoneme(letter: string, onComplete?: () => void): void {
     this.audioManager.playSay();
-    this.time.delayedCall(HiddenSequenceScene.SAY_TO_LETTER_DELAY_MS, () => {
+    this.time.delayedCall(getSayDelay(), () => {
       this.audioManager.playPhonemeAndWait(letter, onComplete);
     });
   }
@@ -320,7 +329,7 @@ export class HiddenSequenceScene extends Phaser.Scene {
   /** Play "Let's Find" voice clip followed by the letter's phoneme sound */
   private playLetsFindThenPhoneme(letter: string, onComplete?: () => void): void {
     this.audioManager.playLetsFind();
-    this.time.delayedCall(HiddenSequenceScene.LETS_FIND_TO_LETTER_DELAY_MS, () => {
+    this.time.delayedCall(getLetsFindDelay(), () => {
       this.audioManager.playPhonemeAndWait(letter, onComplete);
     });
   }

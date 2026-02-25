@@ -141,7 +141,8 @@ export class MainMenuScene extends Phaser.Scene {
       lineHeight: '1.45',
       textAlign: 'left',
       whiteSpace: 'pre-wrap',
-      overflowY: 'hidden',
+      overflowY: 'auto',
+      overflowX: 'hidden',
       padding: '8px 12px',
       boxSizing: 'border-box',
     }, body);

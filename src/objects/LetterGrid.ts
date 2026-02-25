@@ -87,13 +87,14 @@ export class LetterGrid extends Phaser.GameObjects.Container {
     for (const adjPos of adjacent) {
       const tile = this.getTileAt(adjPos);
       if (!tile) continue;
-      if (tile.getTileState() === LetterTileState.COMPLETED) continue;
-
       // Hidden tiles stay hidden — don't change their visual state
       if (tile.getTileState() === LetterTileState.HIDDEN) continue;
 
-      if (tile.isEmpty) {
+      if (tile.isEmpty || tile.isBroken) {
         tile.setTileState(LetterTileState.EMPTY_HIGHLIGHTED);
+      } else if (tile.getTileState() === LetterTileState.COMPLETED) {
+        // Not yet slashed (mid-animation corner case) — skip
+        continue;
       } else {
         tile.setTileState(LetterTileState.HIGHLIGHTED);
       }

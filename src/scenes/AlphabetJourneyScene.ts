@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, COLORS, FONT_FAMILY } from '../config/Constants';
+import { GAME_WIDTH, GAME_HEIGHT, COLORS, FONT_FAMILY, getSayDelay, getLetsFindDelay } from '../config/Constants';
+import { generateLevel1Config } from '../config/LevelConfigs';
+import { AudioDebugOverlay } from '../objects/AudioDebugOverlay';
 import { LevelConfig, GridPosition } from '../types/LevelTypes';
 import { LetterGrid } from '../objects/LetterGrid';
 import { LetterTile, LetterTileState } from '../objects/LetterTile';
@@ -12,8 +14,6 @@ import { RewardTracker } from '../managers/RewardTracker';
 import { ProgressManager } from '../managers/ProgressManager';
 
 export class AlphabetJourneyScene extends Phaser.Scene {
-  private static readonly SAY_TO_LETTER_DELAY_MS = 550;
-  private static readonly LETS_FIND_TO_LETTER_DELAY_MS = 440;
   private levelConfig: LevelConfig;
   private grid: LetterGrid;
   private player: PlayerCharacter;
@@ -31,13 +31,17 @@ export class AlphabetJourneyScene extends Phaser.Scene {
   private pendingSlashTile: LetterTile | null = null;
   private pendingSlashPosition: GridPosition | null = null;
   private pendingArcadeReward: boolean = false;
+  private audioDebugOverlay: AudioDebugOverlay | null = null;
 
   constructor() {
     super({ key: 'AlphabetJourneyScene' });
   }
 
   init(data: { levelConfig: LevelConfig }): void {
-    this.levelConfig = data.levelConfig;
+    // Always generate a fresh layout for Level 1 so every session has new letters
+    this.levelConfig = data.levelConfig.levelId === 1
+      ? generateLevel1Config()
+      : data.levelConfig;
   }
 
   create(): void {
@@ -88,6 +92,15 @@ export class AlphabetJourneyScene extends Phaser.Scene {
     this.inputManager = new InputManager(this);
     this.inputManager.enable();
     this.spaceKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE) ?? null;
+    this.input.keyboard?.on('keydown-BACKTICK', () => {
+      if (this.audioDebugOverlay) {
+        this.audioDebugOverlay.destroy();
+        this.audioDebugOverlay = null;
+      } else {
+        this.audioDebugOverlay = new AudioDebugOverlay(this);
+      }
+    });
+    this.events.on('audioDebugOverlayClosed', () => { this.audioDebugOverlay = null; });
 
     // Setup tap-on-tile
     this.setupTileTapHandlers();
@@ -146,8 +159,8 @@ export class AlphabetJourneyScene extends Phaser.Scene {
   }
 
   private onMoveComplete(targetTile: LetterTile, targetPos: GridPosition): void {
-    // Empty tile: just walk there, no validation needed
-    if (targetTile.isEmpty) {
+    // Empty tile or already-slashed tile: just walk there, no validation needed
+    if (targetTile.isEmpty || targetTile.isBroken) {
       this.currentPosition = targetPos;
       this.grid.clearHighlights();
       this.grid.highlightAdjacent(this.currentPosition);
@@ -299,7 +312,7 @@ export class AlphabetJourneyScene extends Phaser.Scene {
   /** Play "Say" voice clip followed by the letter's phoneme sound */
   private playSayThenPhoneme(letter: string, onComplete?: () => void): void {
     this.audioManager.playSay();
-    this.time.delayedCall(AlphabetJourneyScene.SAY_TO_LETTER_DELAY_MS, () => {
+    this.time.delayedCall(getSayDelay(), () => {
       this.audioManager.playPhonemeAndWait(letter, onComplete);
     });
   }
@@ -307,7 +320,7 @@ export class AlphabetJourneyScene extends Phaser.Scene {
   /** Play "Let's Find" voice clip followed by the letter's phoneme sound */
   private playLetsFindThenPhoneme(letter: string, onComplete?: () => void): void {
     this.audioManager.playLetsFind();
-    this.time.delayedCall(AlphabetJourneyScene.LETS_FIND_TO_LETTER_DELAY_MS, () => {
+    this.time.delayedCall(getLetsFindDelay(), () => {
       this.audioManager.playPhonemeAndWait(letter, onComplete);
     });
   }
